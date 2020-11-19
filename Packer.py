@@ -28,8 +28,10 @@ def handle_invalid_usage(error):
     return response
 
 @app.route('/')
-def hello_world():
-    raise InvalidUsage(message='This is a restricted server. Your IP has been logged.', status_code=403)
+@app.route('/<_>')
+def hello_world(_):
+    return ('', 204)
+    #raise InvalidUsage(message='This is a restricted server. Your IP has been logged.', status_code=403)
 
 #This is the api used when the loader 
 @app.route('/api/<id>', methods=['GET'])
