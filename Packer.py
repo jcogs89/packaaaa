@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, current_app
 import os
+import io
+import zlib
 
 from flask.helpers import send_file
 app = Flask(__name__)
@@ -42,11 +44,30 @@ def mainpacker(id):
     if not authorized:
         raise InvalidUsage(message='This is a restricted server. Your IP has been logged.', status_code=403)
     
-
-    try:
-        return send_file('static/' + id, attachment_filename=id)
-    except Exception as e:
-        return str(e)
+    available_payloads = []
+    for (_, dirnames, _) in os.walk('static/' + id):
+        available_payloads.extend(dirnames)
+    
+    #choose a payload or get available payloads
+    if request.args.get('send', '') in available_payloads and request.args.get('send', '') != '':
+        try:
+            fileblob = bytearray(b'')
+            file_meta = "meta-"
+            for (root, _, filenames) in os.walk('static/' + id + '/' + request.args.get('send')):
+                for filename in filenames:
+                    current_file = open(os.path.join(root, filename), 'rb').read()
+                    compressed_file = zlib.compress(current_file, zlib.Z_BEST_COMPRESSION)
+                    o_filesize = len(current_file)
+                    c_filesize = len(compressed_file)
+                    file_meta = file_meta + str(o_filesize) + "." + str(c_filesize) + "-"
+                    fileblob.extend(compressed_file)
+            
+            #we should send the metadata in the filename
+            return send_file(io.BytesIO(fileblob), as_attachment=True, attachment_filename=file_meta)
+        except Exception as e:
+            return str(e)
+    else:
+        return jsonify(available_payloads)
 
 app.run()
 #app.run(host = "0.0.0.0", port = 25566)
