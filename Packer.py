@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, current_app
 import os, io
 import zlib
 import nacl.secret, nacl.utils
+import requests
 
 from flask.helpers import send_file
 app = Flask(__name__)
@@ -28,14 +29,25 @@ def handle_invalid_usage(error):
     return response
 
 @app.route('/')
-@app.route('/<_>')
-def hello_world(_):
-    return ('', 204)
-    #raise InvalidUsage(message='This is a restricted server. Your IP has been logged.', status_code=403)
+def dataroute():
+    #this is for various other types of communicating with the packer
+    #such as through DNS, the format of the data field should be this
+    #<id> <payload>
+    data_field = request.get_data(cache=False, as_text=True)
+    
+    args = data_field.split(' ')
+    if len(args) == 0 or len(args) > 2:
+        return ('', 204)
+    if len(args) == 1:
+        args.append('')
+    return packer(args[0], args[1])
 
 #This is the api used when the loader 
 @app.route('/api/<id>', methods=['GET'])
-def mainpacker(id):
+def apiroute(id):
+    return packer(id, '')
+
+def packer(id, query):
     #todo: authenticate this api access with use of secret key
 
     #the reason why we have an authorized-ids.txt is that we may want to
@@ -55,8 +67,12 @@ def mainpacker(id):
     for (_, dirnames, _) in os.walk('static/' + id):
         available_payloads.extend(dirnames)
     
+    send_arg = request.args.get('send', '')
+    if send_arg == '':
+        send_arg = query
+
     #choose a payload or get available payloads
-    if request.args.get('send', '') in available_payloads and request.args.get('send', '') != '':
+    if send_arg in available_payloads and send_arg != '':
         try:
             #encryption with PyNacl
             key = open('static/' + id + '/secret-key', 'rb').read()
@@ -67,7 +83,7 @@ def mainpacker(id):
             #filemeta will have the following format, original file size . compressed file size . encrypted file size
             #each file compressed and added to the fileblob will have a corresponding filemeta tuple
             file_meta = ""
-            for (root, _, filenames) in os.walk('static/' + id + '/' + request.args.get('send')):
+            for (root, _, filenames) in os.walk('static/' + id + '/' + send_arg):
                 for filename in filenames:
                     #we will pack all files contained in the payload folder, no matter what subfolders they may be in
                     current_file = open(os.path.join(root, filename), 'rb').read()
@@ -85,6 +101,7 @@ def mainpacker(id):
         return jsonify(available_payloads)
 
 if __name__ == "__main__":
-    app.run()
-    #app.run(ssl_context='adhoc')
+    #app.run(port = 25566)
+    #app.run(port = 25566, ssl_context='adhoc')
+    app.run(host = "0.0.0.0", port = 25566)
     #app.run(host = "0.0.0.0", port = 25566, ssl_context='adhoc')

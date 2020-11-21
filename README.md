@@ -7,6 +7,12 @@ The follow dependencies are required to build:
 flask 
 pynacl #for encryption
 pyopenssl #for 'adhoc' 
+requests
+```
+
+To run
+```
+python Packer.py
 ```
 
 Current Functionality:
