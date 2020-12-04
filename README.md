@@ -5,9 +5,11 @@ This code repository is the code for the Packer portion of the CYSE 492 Senior D
 The follow dependencies are required to build:
 ```
 flask 
-pynacl #for encryption
-pyopenssl #for 'adhoc' 
+pynacl 
+pyopenssl 
 requests
+pysimplegui
+config-with-yaml
 ```
 
 To run
@@ -27,4 +29,5 @@ Current Functionality:
 
 todo:
 Authenticate usage of api
+
 To create final executable: https://pyinstaller.readthedocs.io/en/stable/usage.html

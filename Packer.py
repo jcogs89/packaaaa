@@ -1,8 +1,49 @@
+'''
+This file is meant to hold the core Packer mechanisms
+
+This runs a HTTPS server using the REST API
+There are two methods of using the API
+
+The default:
+Access <ip>:<port>/api/<id>
+
+<ip>: the IP of the server
+<port>: the port of this application
+<id>: the ID of the loader
+
+This will return a list of payloads available to the loader
+To request a particular payload add the following to the api access
+
+?send=<payload>
+
+<payload>: one of the names of the payload returned in the above list
+
+Alternative:
+Access <ip>:<port> w/ a Data field
+
+This is to accomodate alternative protocols other than HTTP
+The data field of a request should be populated in the following format
+
+"<id>"
+"<id> <payload>"
+
+<id>: the ID of the loader
+<payload>: one of the names of the payload returned in a payload list
+
+The first format will return the payload list
+The second format will return the payload
+
+Example in Python:
+import requests
+
+response = requests.get("http://example.org:80", data="test payload-1")
+'''
+from zlib import compress
 from flask import Flask, request, jsonify, current_app
 import os, io
 import zlib
 import nacl.secret, nacl.utils
-import requests
+import config_with_yaml as config
 
 from flask.helpers import send_file
 app = Flask(__name__)
@@ -47,6 +88,62 @@ def dataroute():
 def apiroute(id):
     return packer(id, '')
 
+@app.route('/cli/<arg>')
+    #make sure that only local computer can access this admin panel
+def cli(arg):
+    key = open('cli-secret-key', 'rb').read()
+    box = nacl.secret.SecretBox(key)
+
+    auth = False
+    try:
+        if box.decrypt(request.data) == b"packer-cli":
+            auth = True
+    except:
+        pass
+    if request.remote_addr != "127.0.0.1" or not auth:
+        raise InvalidUsage(message='This is a restricted server. Your IP has been logged.', status_code=403)
+
+    loader_id = request.args.get('id', '')
+    payload_name = request.args.get('payload', '')
+
+    available_loaders = next(os.walk('static/'))[1]
+    available_payloads = []
+    if loader_id != '':
+        for dirnames in next(os.walk('static/' + loader_id))[1]:
+            available_payloads.append(dirnames)
+
+    if arg == "hello":
+        return ("hello", 200)
+    elif arg == "authorized":
+        with current_app.open_resource('static/authorized-ids.txt') as f:
+            authorized_ids: str = []
+            for ids in f:
+                authorized_ids.append(ids.strip().decode())
+        return jsonify(authorized_ids)
+    elif arg == "available":
+        return jsonify(next(os.walk('static/'))[1])
+    elif arg == "online":
+        return ("To be implemented")
+    elif arg == "details":
+        if loader_id in available_loaders:
+            return send_file('static/' + loader_id + "/details.txt")
+        return ("ID Not Found", 404)
+    elif arg == "payloads":
+        if loader_id in available_loaders:
+            return (jsonify(available_payloads))
+        return ("ID Not Found", 404)
+    elif arg == "send":
+        if loader_id in available_loaders:
+            if payload_name in available_payloads:
+                return ("To be implemented")
+            else:
+                return ("Payload Not Found", 404)
+        else:
+            return ("ID Not Found", 404)
+        
+    return ("Invalid Argument", 400)
+
+
 def packer(id, query):
     #todo: authenticate this api access with use of secret key
 
@@ -64,8 +161,8 @@ def packer(id, query):
     
     #available payloads for a particular loader
     available_payloads = []
-    for (_, dirnames, _) in os.walk('static/' + id):
-        available_payloads.extend(dirnames)
+    for dirnames in next(os.walk('static/' + id))[1]:
+        available_payloads.append(dirnames)
     
     send_arg = request.args.get('send', '')
     if send_arg == '':
@@ -101,7 +198,9 @@ def packer(id, query):
         return jsonify(available_payloads)
 
 if __name__ == "__main__":
-    #app.run(port = 25566)
-    #app.run(port = 25566, ssl_context='adhoc')
-    app.run(host = "0.0.0.0", port = 25566)
-    #app.run(host = "0.0.0.0", port = 25566, ssl_context='adhoc')
+    #todo change adhoc
+    cfg = config.load("config.yml")
+    if cfg.getPropertyWithDefault("packer.ssl", False):
+        app.run(host = cfg.getPropertyWithDefault("packer.uri", "127.0.0.1"), port = cfg.getPropertyWithDefault("packer.port", "5000"), ssl_context='adhoc')
+    else:
+        app.run(host = cfg.getPropertyWithDefault("packer.uri", "127.0.0.1"), port = cfg.getPropertyWithDefault("packer.port", "5000"))

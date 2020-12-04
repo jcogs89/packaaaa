@@ -1,0 +1,5 @@
+This is a sample file
+This file is meant to describe all the details about this particular loader
+For example:
+
+Meant to be deployed at xxx
