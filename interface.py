@@ -92,6 +92,10 @@ def cli(uri, auth_data):
 def gui(uri, auth_data):
     sg.theme('DarkAmber')
 
+    initial_avail_loaders = json.loads(requests.get(uri + "available", data=auth_data).content)
+    initial_auth_loaders = json.loads(requests.get(uri + "authorized", data=auth_data).content)
+    avail_no_overlap = [i for i in initial_avail_loaders if i not in initial_auth_loaders]
+
     #gui elements start
     #this list is a list of all loaders defined in the static folder
     available_loader_list = [
@@ -105,7 +109,7 @@ def gui(uri, auth_data):
         ],
         [
             sg.Listbox(
-                values=json.loads(requests.get(uri + "available", data=auth_data).content), enable_events=True, size=(40,20), key="_avail_loader_list_"
+                values=avail_no_overlap, enable_events=True, size=(40,20), key="_avail_loader_list_"
             )
         ],
         [
@@ -125,7 +129,7 @@ def gui(uri, auth_data):
         ],
         [
             sg.Listbox(
-                values=json.loads(requests.get(uri + "authorized", data=auth_data).content), enable_events=True, size=(40,20), key="_auth_loader_list_"
+                values=initial_auth_loaders, enable_events=True, size=(40,20), key="_auth_loader_list_"
             )
         ],
         [
@@ -186,6 +190,7 @@ def gui(uri, auth_data):
         ]
     ]
 
+    MLINE_KEY = '-MLINE-'+sg.WRITE_ONLY_KEY
     layout = [
         [
                 sg.Column(available_loader_list),
@@ -195,7 +200,7 @@ def gui(uri, auth_data):
                 sg.Column(command_area)
         ],
         [
-            sg.Output(size=(180,10))
+            sg.Multiline(size=(180,18), key=MLINE_KEY)
         ]
     ]
 
@@ -203,9 +208,8 @@ def gui(uri, auth_data):
     window = sg.Window('Packer Interface', layout)
     # Event Loop to process "events" and get the "values" of the inputs
 
-    selected_avail_loader = ""
-    selected_auth_loader = ""
     selected_loader = ""
+    authed_loader = False
 
     add_new_loader = ""
     search_loader = ""
@@ -213,32 +217,56 @@ def gui(uri, auth_data):
 
     selected_payload = ""
 
+    #formatted print
+    cprint = sg.cprint
+    sg.cprint_set_output_destination(window, MLINE_KEY)
+
     while True:
         event, values = window.read()
         dateTimeObj = datetime.now()
         timestampStr = dateTimeObj.strftime("%d-%b-%Y (%H:%M:%S)")
         infoPrefix = "[INFO] " + timestampStr + " "
+        warningPrefix = "[WARN] " + timestampStr + " "
 
         if event == sg.WIN_CLOSED or event == 'Cancel': # if user closes window or clicks cancel
             break
         if event == '_avail_loader_list_' and len(values['_avail_loader_list_']):     # if a list item is chosen
-            selected_avail_loader = str(values['_avail_loader_list_'][0])
-        if event == '_auth_loader_list_' and len(values['_auth_loader_list_']):
-            #select loader
-            selected_auth_loader = str(values['_auth_loader_list_'][0])
-            print(infoPrefix + "Selected Loader: " + selected_auth_loader)
-            window['_selected_loader_text_'].update(selected_auth_loader)
-            
+            authed_loader = False
+
+            selected_loader = str(values['_avail_loader_list_'][0])
+            cprint(infoPrefix + "Selected Loader: " + selected_loader)
+            window['_selected_loader_text_'].update(selected_loader)
+
             #update payload list
-            window['_avail_payloads_'].update(json.loads(requests.get(uri + "payloads?id=" + selected_auth_loader, data=auth_data).content))
+            window['_avail_payloads_'].update(json.loads(requests.get(uri + "payloads?id=" + selected_loader, data=auth_data).content))
+        if event == '_auth_loader_list_' and len(values['_auth_loader_list_']):
+            authed_loader = True
+            
+            #select loader
+            selected_loader = str(values['_auth_loader_list_'][0])
+            cprint(infoPrefix + "Selected Loader: " + selected_loader)
+            window['_selected_loader_text_'].update(selected_loader)
+
+            #update payload list
+            window['_avail_payloads_'].update(json.loads(requests.get(uri + "payloads?id=" + selected_loader, data=auth_data).content))
 
         if event == '_avail_payloads_' and len(values['_avail_payloads_']):
             selected_payload = str(values['_avail_payloads_'][0])
-            print(infoPrefix + "Selected Payload [" + selected_auth_loader +"]: " + selected_payload)
+            cprint(infoPrefix + "Selected Payload [" + selected_loader +"]: " + selected_payload)
             window['_selected_payload_text_'].update(selected_payload)
 
         if event == '_loader_details_':
-            print(infoPrefix + "Details request for: " + selected_auth_loader)
+            cprint(infoPrefix + "Details request for: " + selected_loader)
+        
+        if event == '_send_payload_':
+            if selected_loader == '':
+                cprint(warningPrefix + "No loader selected!", background_color="red", text_color="white")
+            else:
+                if authed_loader:
+                    #todo impelment popup
+                    cprint(infoPrefix + "Send to be implemented")
+                else:
+                    cprint(warningPrefix + "Loader [" + selected_loader + "] not authorized, Payload not sent!", background_color="red", text_color="white")
 
             
 
@@ -247,3 +275,4 @@ def gui(uri, auth_data):
 
 if __name__ == "__main__":
     main(sys.argv[1:])
+    

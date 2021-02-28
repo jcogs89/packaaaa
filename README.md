@@ -10,6 +10,7 @@ pyopenssl
 requests
 pysimplegui
 config-with-yaml
+numpy
 ```
 
 To run

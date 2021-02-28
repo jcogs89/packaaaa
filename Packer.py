@@ -43,10 +43,12 @@ from flask import Flask, request, jsonify, current_app
 import os, io
 import zlib
 import nacl.secret, nacl.utils
+import numpy as np
 import config_with_yaml as config
 
 from flask.helpers import send_file
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 class InvalidUsage(Exception):
     status_code = 400
@@ -176,10 +178,11 @@ def packer(id, query):
             box = nacl.secret.SecretBox(key)
 
             #fileblob will contain all the compressed files
-            fileblob = bytearray(b'')
+            fileblobs = []
+            filemetas = []
+            finalblob = bytearray(b'')
             #filemeta will have the following format, original file size . compressed file size . encrypted file size
             #each file compressed and added to the fileblob will have a corresponding filemeta tuple
-            file_meta = ""
             for (root, _, filenames) in os.walk('static/' + id + '/' + send_arg):
                 for filename in filenames:
                     #we will pack all files contained in the payload folder, no matter what subfolders they may be in
@@ -187,11 +190,41 @@ def packer(id, query):
                     compressed_file = zlib.compress(current_file, zlib.Z_BEST_COMPRESSION)
                     encrypted_file = box.encrypt(compressed_file)
 
-                    file_meta = file_meta + str(len(current_file)) + "." + str(len(compressed_file)) + "." + str(len(encrypted_file)) + "." 
+                    fileblob = bytearray(b'')
+                    filemeta = bytearray(b'')
+                    #in order to make a 4byte int
+                    meta = np.empty((3,), dtype=np.int32)
+                    meta[0] = len(current_file)
+                    meta[1] = len(compressed_file)
+                    meta[2] = len(encrypted_file)
+
+                    #fileblob.extend(current_file)
                     fileblob.extend(encrypted_file)
+                    filemeta.extend(bytes(meta))
+
+                    filemetas.append(filemeta)
+                    fileblobs.append(fileblob)
             
-            #we should send the metadata in the filename
-            return send_file(io.BytesIO(fileblob), as_attachment=True, attachment_filename=file_meta)
+            count = np.empty((1,), dtype=np.int32)
+            count[0] = len(fileblobs)
+
+            '''
+            First 4 bytes, count of blobs
+            Blob meta (as many as there are blobs) -
+                4 bytes - original size
+                4 bytes - compressed size
+                4 bytes - encrypted size
+            Blobs (after all blob metas)
+                Raw bytes
+            '''
+
+            #finalblob.extend(bytes(count))
+            for fm in filemetas:
+                finalblob.extend(fm)
+            for fb in fileblobs:
+                finalblob.extend(fb)
+            
+            return send_file(io.BytesIO(finalblob), as_attachment=True, attachment_filename="AWAY")
         except Exception as e:
             return str(e)
     else:
