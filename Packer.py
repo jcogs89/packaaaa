@@ -45,8 +45,56 @@ import zlib
 import nacl.secret, nacl.utils
 import numpy as np
 import config_with_yaml as config
+import sys, getopt
 
 from flask.helpers import send_file
+
+'''
+Generating keys via args
+
+Format:
+
+./Packer.py -g -p <password> -o <name of file>
+'''
+
+if(len(sys.argv[1:]) > 0):
+    password = ""
+    outfile = "secret-key"
+    generate = False
+    try:
+        opts, args = getopt.getopt(sys.argv[1:],"hgp:o:",["help", "gen", "pass=","ofile="])
+    except:
+        print("Correct Usage:\n./Packer.py -g [-p] <password> [-o] <name of file>\nRemember to enclose strings in double quotes")
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            print("Correct Usage:\n./Packer.py -g [-p] <password> [-o] <name of file>\nRemember to enclose strings in double quotes")
+            sys.exit(0)
+        elif opt in ("-g", "--gen"):
+            generate = True
+        elif opt in ("-p", "--pass"):
+            password = arg
+        elif opt in ("-o", "--ofile"):
+            outfile = arg
+    
+    if(generate):
+        key = ""
+        if(password != ""):
+            if(len(password) > 32):
+                key = password[:32]
+            elif(len(password) < 32):
+                key = password + '#' * (32 - len(password))
+            assert(len(key) == 32)
+            key = key.encode('utf-8') #convert to bytes
+        else:
+            #default is 32 bytes
+            key = nacl.utils.random(nacl.secret.SecretBox.KEY_SIZE)
+        f = open(outfile, "wb")
+        f.write(key)
+        f.close()
+    sys.exit(0)
+
+
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
@@ -218,7 +266,7 @@ def packer(id, query):
                 Raw bytes
             '''
 
-            #finalblob.extend(bytes(count))
+            finalblob.extend(bytes(count))
             for fm in filemetas:
                 finalblob.extend(fm)
             for fb in fileblobs:
