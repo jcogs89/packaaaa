@@ -1,7 +1,7 @@
 packer:
   uri: "0.0.0.0" #set to 0.0.0.0 for outward facing, 127.0.0.1 for local testing
   port: "25566"
-  ssl: False
+  ssl: True
 
 cli:
   retryLimit: 3

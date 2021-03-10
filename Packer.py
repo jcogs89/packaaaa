@@ -64,11 +64,11 @@ if(len(sys.argv[1:]) > 0):
     try:
         opts, args = getopt.getopt(sys.argv[1:],"hgp:o:",["help", "gen", "pass=","ofile="])
     except:
-        print("Correct Usage:\n./Packer.py -g [-p] <password> [-o] <name of file>\nRemember to enclose strings in double quotes")
+        print("Correct Usage:\n./Packer.py -g [-p] <password> [-o] <name of file>\nRemember to enclose strings in double quotes\nPasswords will be padded/truncated to 32 bytes")
         sys.exit(2)
     for opt, arg in opts:
         if opt in ("-h", "--help"):
-            print("Correct Usage:\n./Packer.py -g [-p] <password> [-o] <name of file>\nRemember to enclose strings in double quotes")
+            print("Correct Usage:\n./Packer.py -g [-p] <password> [-o] <name of file>\nRemember to enclose strings in double quotes\nPasswords will be padded/truncated to 32 bytes")
             sys.exit(0)
         elif opt in ("-g", "--gen"):
             generate = True
@@ -231,27 +231,72 @@ def packer(id, query):
             finalblob = bytearray(b'')
             #filemeta will have the following format, original file size . compressed file size . encrypted file size
             #each file compressed and added to the fileblob will have a corresponding filemeta tuple
+
+            argv_files = []
+            envp_files = []
+            payload_files = []
             for (root, _, filenames) in os.walk('static/' + id + '/' + send_arg):
                 for filename in filenames:
-                    #we will pack all files contained in the payload folder, no matter what subfolders they may be in
-                    current_file = open(os.path.join(root, filename), 'rb').read()
-                    compressed_file = zlib.compress(current_file, zlib.Z_BEST_COMPRESSION)
-                    encrypted_file = box.encrypt(compressed_file)
+                    path = os.path.join(root, filename)
+                    if filename.endswith(".argv"):
+                        argv_files.append(path)
+                    elif filename.endswith(".envp"):
+                        envp_files.append(path)
+                    else:
+                        payload_files.append(path)
+            payload_files.sort()
 
-                    fileblob = bytearray(b'')
-                    filemeta = bytearray(b'')
-                    #in order to make a 4byte int
-                    meta = np.empty((3,), dtype=np.int32)
-                    meta[0] = len(current_file)
-                    meta[1] = len(compressed_file)
-                    meta[2] = len(encrypted_file)
+            for payload in payload_files:
+                #we will pack all files contained in the payload folder, no matter what subfolders they may be in
+                current_file = open(payload, 'rb').read()
+                compressed_file = zlib.compress(current_file, zlib.Z_BEST_COMPRESSION)
+                encrypted_file = box.encrypt(compressed_file)
 
-                    #fileblob.extend(current_file)
-                    fileblob.extend(encrypted_file)
-                    filemeta.extend(bytes(meta))
+                payload_name = payload.split('.')[0]
+                exe_name = payload.split('/')[-1].split('\\')[-1]
+                
+                argv = []
+                envp = []
+                try:
+                    argv.append(exe_name.encode("utf-8"))
+                    argv += open(payload_name + ".argv", 'rb').read().splitlines()
+                except:
+                    pass
+                try:
+                    envp = open(payload_name + ".envp", 'rb').read().splitlines()
+                except:
+                    pass
 
-                    filemetas.append(filemeta)
-                    fileblobs.append(fileblob)
+                #print(argv)
+
+                filemeta = bytearray(b'')
+                #in order to make a 4byte int
+                meta = np.empty((5,), dtype=np.int32)
+                meta[0] = len(argv)
+                meta[1] = len(envp)
+                meta[2] = len(current_file)
+                meta[3] = len(compressed_file)
+                meta[4] = len(encrypted_file)
+
+                filemeta.extend(bytes(meta))
+
+                for idx in range(len(argv)):
+                    arglen = np.empty((1,), dtype=np.int32)
+                    arglen[0] = len(argv[idx])
+                    filemeta.extend(bytes(arglen))
+                    filemeta.extend(bytes(argv[idx]))
+                    
+                for idx in range(len(envp)):
+                    envplen = np.empty((1,), dtype=np.int32)
+                    envplen[0] = len(envp[idx])
+                    filemeta.extend(bytes(envplen))
+                    filemeta.extend(bytes(envp[idx]))
+
+                fileblob = bytearray(b'')
+                fileblob.extend(encrypted_file)
+
+                filemetas.append(filemeta)
+                fileblobs.append(fileblob)
             
             count = np.empty((1,), dtype=np.int32)
             count[0] = len(fileblobs)
@@ -259,9 +304,17 @@ def packer(id, query):
             '''
             First 4 bytes, count of blobs
             Blob meta (as many as there are blobs) -
+                4 bytes - number of argv
+                4 bytes - number of envp
                 4 bytes - original size
                 4 bytes - compressed size
                 4 bytes - encrypted size
+                argv data (as many as there are argv)
+                    4 bytes - len of arg
+                    x bytes - arg
+                envp data (as many as there are envp)
+                    4 bytes - len of env
+                    x bytes - env arg
             Blobs (after all blob metas)
                 Raw bytes
             '''
