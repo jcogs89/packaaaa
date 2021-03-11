@@ -266,31 +266,45 @@ def packer(id, query):
                     envp = open(payload_name + ".envp", 'rb').read().splitlines()
                 except:
                     pass
+                
+                #obfuscating the argv and envp
+                obfv_argv = []
+                for val in argv: 
+                    result = bytearray(b'')
+                    for x in val: 
+                        result.append(x ^ 0xFE)
+                    obfv_argv.append(bytes(result))
+                    #''.join([chr(ord(a[i%len(a)]) ^ ord(b[i%(len(b))])) for i in range(max(len(a), len(b)))])
 
-                #print(argv)
+                obfv_envp = []
+                for val in envp: 
+                    result = bytearray(b'')
+                    for x in val: 
+                        result.append(x ^ 0xFE)
+                    obfv_envp.append(bytes(result))
 
                 filemeta = bytearray(b'')
                 #in order to make a 4byte int
                 meta = np.empty((5,), dtype=np.int32)
-                meta[0] = len(argv)
-                meta[1] = len(envp)
+                meta[0] = len(obfv_argv)
+                meta[1] = len(obfv_envp)
                 meta[2] = len(current_file)
                 meta[3] = len(compressed_file)
                 meta[4] = len(encrypted_file)
 
                 filemeta.extend(bytes(meta))
 
-                for idx in range(len(argv)):
+                for idx in range(len(obfv_argv)):
                     arglen = np.empty((1,), dtype=np.int32)
-                    arglen[0] = len(argv[idx])
+                    arglen[0] = len(obfv_argv[idx])
                     filemeta.extend(bytes(arglen))
-                    filemeta.extend(bytes(argv[idx]))
+                    filemeta.extend(obfv_argv[idx])
                     
-                for idx in range(len(envp)):
+                for idx in range(len(obfv_envp)):
                     envplen = np.empty((1,), dtype=np.int32)
-                    envplen[0] = len(envp[idx])
+                    envplen[0] = len(obfv_envp[idx])
                     filemeta.extend(bytes(envplen))
-                    filemeta.extend(bytes(envp[idx]))
+                    filemeta.extend(obfv_envp[idx])
 
                 fileblob = bytearray(b'')
                 fileblob.extend(encrypted_file)
