@@ -136,7 +136,7 @@ def handle_invalid_usage(error):
 def dataroute():
     #this is for various other types of communicating with the packer
     #such as through DNS, the format of the data field should be this
-    #<id> <payload>
+    #<id> <payload> <uid>
     data_field = request.get_data(cache=False, as_text=True)
     
     args = data_field.split(' ')
