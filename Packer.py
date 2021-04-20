@@ -154,6 +154,10 @@ def dataroute():
 def apiroute(id):
     return packer(id, '', '')
 
+@app.route('/api/<id>', methods=['POST'])
+def callback(id):
+    return log_callback(id, request.get_data(cache=False, as_text=True))
+
 @app.route('/cli/<arg>')
     #make sure that only local computer can access this admin panel
 def cli(arg):
@@ -205,6 +209,10 @@ def cli(arg):
         
     return ("Invalid Argument", 400)
 
+def log_callback(id, data):
+    print(id)
+    print(data)
+    app_log.info(f'{id} | {data}')
 
 def packer(id, query, uid):
     #todo: authenticate this api access with use of secret key

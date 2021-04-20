@@ -34,12 +34,13 @@ Possible boolean flags (1 is set, default is 0)
 
 Format:
 
-timestamp payload payload payload
-timestamp payload
-timestamp payload payload payload
+;payload payload payload
+;payload
+;payload payload
 
-Where timestamp is the current time this instruction was given by the operator (Loaders use this to prevent redownloading the same instruction)
 Multiple payloads can be sent to a Loader by delimiting them with a space
+
+Loaders keep track of the number of sent instructions, so instructions may not be deleted unless the final instruction is reset
 
 7. A log is kept in the same directory as the Packer, it is important to create the ./logs/ folder before first use. Multiple instances of the same Loader can be kept track of in the log by providing a uid field in the http request. Accepted characters: a-z A-Z 0-9
 
