@@ -209,9 +209,14 @@ def cli(arg):
         
     return ("Invalid Argument", 400)
 
-def log_callback(id, data):
+def log_callback(id, obfs_data):
     print(id)
-    print(data)
+    data = []
+    result = bytearray(b'')
+    for char in obfs_data: 
+        result.append(char ^ 0xFE)
+        data.append(bytes(result))
+
     app_log.info(f'{id} | {data}')
 
 def packer(id, query, uid):
