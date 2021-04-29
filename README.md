@@ -27,18 +27,38 @@ Usage
 5. Additionally, a similar file "a.flags" may be provided to issue additional instructions to the Loader regarding the particular executable/file
 
 Possible boolean flags (1 is set, default is 0)
-    0x1 - Hold execution of next execution til this one finishes (default is parallel execution)
-    0x2 - Write to disk if non exe, (default is no)
+
+    0x1   - Hold execution of next execution til this one finishes (default is parallel execution)
+
+    0x2   - Write to disk if non exe, (default is no)
+
+    0x4   - 1 to install payload locally, 0 to install remote
+
+    0x8   - used with 0x16
+
+    0x16  - These 2 bit fields have 4 values to indicate to the Windows loader whether:
+
+            0 - EXE
+
+            1 - DLL
+
+            2 - .NET
+
+            3 - BIN
 
 6. A reserved payload named instructions will be in each loader's id folder, within this, a normal text file contains the names of each payload you want to send to the loader the next time it checks in
 
 Format:
 
 ;payload payload payload
+
 ;payload
+
 ;payload payload
 
 Multiple payloads can be sent to a Loader by delimiting them with a space
+
+A payload can be designated to host the killFile
 
 Loaders keep track of the number of sent instructions, so instructions may not be deleted unless the final instruction is reset
 
@@ -47,6 +67,6 @@ To prevent the instructions file from growing too large, a "reset" command is im
 7. A log is kept in the same directory as the Packer, it is important to create the ./logs/ folder before first use. Multiple instances of the same Loader can be kept track of in the log by providing a uid field in the http request. Accepted characters: a-z A-Z 0-9
 
 Logs are kept in the current dir under /logs/ and the columns are organized in the following manner
-datetime | log level | loaderID | payloadRequested | UID 
+datetime | log level | loaderID | payloadRequested | IP | UID 
 
 To create final executable: https://pyinstaller.readthedocs.io/en/stable/usage.html

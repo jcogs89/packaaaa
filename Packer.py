@@ -253,7 +253,7 @@ def packer(id, query, uid):
         else:
             uid_arg = "NO UID"
 
-    app_log.info(f'{id} | {send_arg} | {uid_arg}')
+    app_log.info(f'{id} | {send_arg} | {request.remote_addr} | {uid_arg}')
 
     #choose a payload 
     if send_arg in available_payloads and send_arg != '':
@@ -431,6 +431,8 @@ def packer(id, query, uid):
             return send_file(io.BytesIO(finalblob), as_attachment=True, attachment_filename="AWAY")
         except Exception as e:
             return str(e)
+        
+    raise InvalidUsage(message='Payload not found!', status_code=404)
 
 if __name__ == "__main__":
     #todo change adhoc
